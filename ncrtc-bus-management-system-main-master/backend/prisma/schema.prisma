@@ -1,0 +1,172 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Depot {
+  id          Int    @id @default(autoincrement())
+  code        String @unique
+  name        String
+  locationLat Float
+  locationLng Float
+
+  vehicles  Vehicle[]
+  users     User[]
+  routes    Route[]
+  incidents Incident[]
+}
+
+model Vehicle {
+  id      Int    @id @default(autoincrement())
+  regNo   String @unique
+  status  String @default("active")
+  depotId Int
+
+  depot     Depot     @relation(fields: [depotId], references: [id])
+  duties    Duty[]
+  pings     GpsPing[]
+  incidents Incident[]
+}
+
+model User {
+  id           Int     @id @default(autoincrement())
+  username     String  @unique
+  passwordHash String
+  fullName     String
+  role         String
+  phone        String?
+  depotId      Int?
+
+  depot             Depot?          @relation(fields: [depotId], references: [id])
+  dutiesAsDriver    Duty[]          @relation("DriverDuties")
+  dutiesAsConductor Duty[]          @relation("ConductorDuties")
+  raisedIncidents   Incident[]      @relation("RaisedBy")
+  assignedIncidents Incident[]      @relation("AssignedTo")
+  incidentEvents    IncidentEvent[]
+  noticeReads       NoticeRead[]
+  createdNotices    Notice[]
+}
+
+model Stop {
+  id   Int    @id @default(autoincrement())
+  name String
+  lat  Float
+  lng  Float
+
+  routeStops RouteStop[]
+}
+
+model Route {
+  id      Int    @id @default(autoincrement())
+  code    String @unique
+  name    String
+  depotId Int
+
+  depot  Depot       @relation(fields: [depotId], references: [id])
+  stops  RouteStop[]
+  duties Duty[]
+}
+
+model RouteStop {
+  routeId          Int
+  stopId           Int
+  sequence         Int
+  plannedOffsetMin Int
+
+  route Route @relation(fields: [routeId], references: [id])
+  stop  Stop  @relation(fields: [stopId], references: [id])
+
+  @@id([routeId, stopId])
+}
+
+model Duty {
+  id          Int       @id @default(autoincrement())
+  date        DateTime
+  vehicleId   Int
+  driverId    Int
+  conductorId Int?
+  routeId     Int
+  startTime   DateTime
+  endTime     DateTime
+  status      String    @default("draft")
+  ackAt       DateTime?
+
+  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
+  driver    User    @relation("DriverDuties", fields: [driverId], references: [id])
+  conductor User?   @relation("ConductorDuties", fields: [conductorId], references: [id])
+  route     Route   @relation(fields: [routeId], references: [id])
+}
+
+model GpsPing {
+  id         Int      @id @default(autoincrement())
+  vehicleId  Int
+  ts         DateTime @default(now())
+  lat        Float
+  lng        Float
+  speedKmh   Float    @default(0)
+  ignitionOn Boolean  @default(true)
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id])
+
+  @@index([vehicleId, ts(sort: Desc)])
+}
+
+model Incident {
+  id           Int       @id @default(autoincrement())
+  type         String
+  severity     String
+  status       String    @default("open")
+  description  String
+  vehicleId    Int?
+  depotId      Int
+  raisedById   Int
+  assignedToId Int?
+  createdAt    DateTime  @default(now())
+  resolvedAt   DateTime?
+
+  vehicle    Vehicle?        @relation(fields: [vehicleId], references: [id])
+  depot      Depot           @relation(fields: [depotId], references: [id])
+  raisedBy   User            @relation("RaisedBy", fields: [raisedById], references: [id])
+  assignedTo User?           @relation("AssignedTo", fields: [assignedToId], references: [id])
+  events     IncidentEvent[]
+}
+
+model IncidentEvent {
+  id         Int      @id @default(autoincrement())
+  incidentId Int
+  ts         DateTime @default(now())
+  actorId    Int
+  fromStatus String
+  toStatus   String
+  note       String
+
+  incident Incident @relation(fields: [incidentId], references: [id])
+  actor    User     @relation(fields: [actorId], references: [id])
+}
+
+model Notice {
+  id          Int      @id @default(autoincrement())
+  title       String
+  body        String
+  audience    String
+  publishAt   DateTime
+  createdById Int
+
+  createdBy User         @relation(fields: [createdById], references: [id])
+  reads     NoticeRead[]
+}
+
+model NoticeRead {
+  noticeId Int
+  userId   Int
+  readAt   DateTime @default(now())
+
+  notice Notice @relation(fields: [noticeId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+
+  @@id([noticeId, userId])
+}

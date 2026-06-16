@@ -1,0 +1,58 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:17
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: ncrtc
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: ./backend
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://postgres:password123@db:5432/ncrtc
+      JWT_SECRET: supersecretkey123
+      PORT: 3000
+    depends_on:
+      db:
+        condition: service_healthy
+    command: >
+      sh -c "npx prisma migrate deploy &&
+             node prisma/seed.js &&
+             node server.js"
+
+  tick:
+    build: ./backend
+    restart: always
+    environment:
+      DATABASE_URL: postgresql://postgres:password123@db:5432/ncrtc
+      JWT_SECRET: supersecretkey123
+      PORT: 3000
+    depends_on:
+      - backend
+    command: sh -c "sleep 15 && node tick.js"
+
+  frontend:
+    build: ./frontend
+    restart: always
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  pgdata:
